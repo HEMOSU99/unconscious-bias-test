@@ -1,0 +1,1319 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>무의식 편향 측정</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .container {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            padding: 20px;
+        }
+
+        .reaction-zone {
+            position: absolute;
+            width: clamp(150px, 20vw, 220px);
+            height: clamp(80px, 12vh, 120px);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            font-size: clamp(18px, 3vw, 24px);
+            font-weight: bold;
+            border-radius: 20px;
+            opacity: 0.8;
+            z-index: 10;
+            top: clamp(10px, 3vh, 30px);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255,255,255,0.2);
+        }
+
+        .reaction-zone.show {
+            display: flex;
+            animation: slideIn 0.6s ease-out;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateY(-50px); opacity: 0; }
+            to { transform: translateY(0); opacity: 0.8; }
+        }
+
+        .like-zone {
+            right: clamp(10px, 3vw, 30px);
+            background: linear-gradient(135deg, #4CAF50, #45a049, #66BB6A);
+            color: white;
+            box-shadow: 0 8px 32px rgba(76, 175, 80, 0.4);
+        }
+
+        .dislike-zone {
+            left: clamp(10px, 3vw, 30px);
+            background: linear-gradient(135deg, #f44336, #da190b, #EF5350);
+            color: white;
+            box-shadow: 0 8px 32px rgba(244, 67, 54, 0.4);
+        }
+
+        .reaction-zone.active {
+            opacity: 1;
+            transform: scale(1.15);
+            box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+        }
+
+        .content-area {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            padding: clamp(30px, 6vw, 60px);
+            border-radius: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.1), 0 8px 32px rgba(0,0,0,0.1);
+            text-align: center;
+            max-width: min(500px, 90vw);
+            min-height: clamp(250px, 40vh, 350px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+
+        .content-text {
+            font-size: clamp(24px, 5vw, 36px);
+            font-weight: 700;
+            color: #2c3e50;
+            margin: 20px 0;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .content-image {
+            font-size: clamp(60px, 12vw, 90px);
+            margin: 20px 0;
+            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.1));
+            animation: float 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .progress-bar {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: clamp(150px, 60%, 250px);
+            height: 6px;
+            background: rgba(0,0,0,0.1);
+            border-radius: 10px;
+            overflow: hidden;
+            backdrop-filter: blur(10px);
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2, #667eea);
+            background-size: 200% 100%;
+            width: 0%;
+            transition: width 0.3s ease;
+            border-radius: 10px;
+            animation: shimmer 2s linear infinite;
+        }
+
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+
+        .timer {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: clamp(12px, 2.5vw, 16px);
+            font-weight: 600;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .start-button {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: clamp(12px, 3vw, 18px) clamp(24px, 6vw, 36px);
+            font-size: clamp(14px, 3vw, 18px);
+            font-weight: 600;
+            border-radius: 25px;
+            cursor: pointer;
+            margin: 10px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .start-button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: left 0.5s;
+        }
+
+        .start-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 35px rgba(102, 126, 234, 0.4);
+        }
+
+        .start-button:hover::before {
+            left: 100%;
+        }
+
+        .start-button:active {
+            transform: translateY(-1px);
+        }
+
+        .instruction {
+            font-size: clamp(14px, 3vw, 18px);
+            color: #34495e;
+            margin-bottom: 25px;
+            line-height: 1.7;
+            font-weight: 500;
+        }
+
+        .user-info {
+            margin-bottom: 25px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .user-info input, .user-info select {
+            padding: 12px 16px;
+            border: 2px solid rgba(102, 126, 234, 0.2);
+            border-radius: 15px;
+            font-size: clamp(12px, 2.5vw, 16px);
+            background: rgba(255,255,255,0.8);
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+            min-width: 120px;
+            font-weight: 500;
+        }
+
+        .user-info input:focus, .user-info select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+            background: white;
+        }
+
+        .results {
+            display: none;
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(25px);
+            padding: clamp(30px, 6vw, 50px);
+            border-radius: 25px;
+            box-shadow: 0 25px 80px rgba(0,0,0,0.15);
+            max-width: min(1000px, 95vw);
+            max-height: 90vh;
+            overflow-y: auto;
+            text-align: center;
+            border: 2px solid rgba(255,255,255,0.5);
+            position: relative;
+        }
+
+        .results.show {
+            display: block;
+            animation: modalSlideIn 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        @keyframes modalSlideIn {
+            from { 
+                transform: translateY(50px) scale(0.9); 
+                opacity: 0; 
+                backdrop-filter: blur(0px);
+            }
+            to { 
+                transform: translateY(0) scale(1); 
+                opacity: 1; 
+                backdrop-filter: blur(25px);
+            }
+        }
+
+        .category-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            margin: 40px 0;
+        }
+
+        .category-card {
+            background: linear-gradient(135deg, #ffffff, #f8f9fa);
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 2px solid rgba(255,255,255,0.7);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .category-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .category-card:hover {
+            transform: translateY(-8px) scale(1.02);
+            box-shadow: 0 20px 50px rgba(0,0,0,0.15);
+        }
+
+        .category-card:hover::before {
+            opacity: 1;
+        }
+
+        .category-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: #2c3e50;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .chart-container {
+            margin: 20px 0;
+            position: relative;
+        }
+
+        .chart-bar {
+            display: flex;
+            align-items: center;
+            margin: 12px 0;
+            gap: 15px;
+        }
+
+        .chart-label {
+            font-weight: 600;
+            min-width: 60px;
+            font-size: 14px;
+            color: #495057;
+        }
+
+        .chart-progress {
+            flex: 1;
+            height: 25px;
+            background: rgba(0,0,0,0.08);
+            border-radius: 15px;
+            overflow: hidden;
+            position: relative;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .chart-fill {
+            height: 100%;
+            border-radius: 15px;
+            transition: width 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .chart-fill.positive {
+            background: linear-gradient(45deg, #4CAF50, #66BB6A);
+            box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+        }
+
+        .chart-fill.negative {
+            background: linear-gradient(45deg, #f44336, #EF5350);
+            box-shadow: 0 2px 8px rgba(244, 67, 54, 0.3);
+        }
+
+        .chart-fill.neutral {
+            background: linear-gradient(45deg, #9E9E9E, #BDBDBD);
+            box-shadow: 0 2px 8px rgba(158, 158, 158, 0.3);
+        }
+
+        .chart-fill::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+            animation: shimmer 2s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { left: -100%; }
+            100% { left: 100%; }
+        }
+
+        .chart-percentage {
+            font-weight: 700;
+            min-width: 45px;
+            color: #2c3e50;
+            font-size: 14px;
+        }
+
+        .stats-summary {
+            background: linear-gradient(135deg, #e8f4fd, #f1f8ff);
+            padding: 25px;
+            border-radius: 20px;
+            margin: 30px 0;
+            border: 2px solid rgba(102, 126, 234, 0.1);
+        }
+
+        .stats-summary h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 24px;
+        }
+
+        .close-button {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            width: 35px;
+            height: 35px;
+            border: none;
+            background: rgba(0,0,0,0.1);
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            color: #666;
+            transition: all 0.3s ease;
+        }
+
+        .close-button:hover {
+            background: rgba(0,0,0,0.2);
+            transform: scale(1.1);
+        }
+
+        .participant-count {
+            position: absolute;
+            top: clamp(15px, 3vh, 25px);
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255,255,255,0.9);
+            backdrop-filter: blur(20px);
+            padding: 12px 24px;
+            border-radius: 25px;
+            font-weight: 600;
+            color: #2c3e50;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+            border: 1px solid rgba(255,255,255,0.3);
+            font-size: clamp(12px, 2.5vw, 16px);
+        }
+
+        .hide-cursor {
+            cursor: none;
+        }
+
+        .custom-cursor {
+            position: fixed;
+            width: 24px;
+            height: 24px;
+            background: radial-gradient(circle, rgba(255,255,255,0.9), rgba(102, 126, 234, 0.7));
+            border: 3px solid rgba(102, 126, 234, 0.8);
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 9999;
+            display: none;
+            transition: all 0.1s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .custom-cursor.show {
+            display: block;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+        }
+
+        .mouse-reset-guide {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 50px;
+            height: 50px;
+            background: radial-gradient(circle, #ff6b6b, #ee5a52);
+            border: 4px solid white;
+            border-radius: 50%;
+            z-index: 1000;
+            display: none;
+            animation: pulseGuide 1.5s infinite;
+            box-shadow: 0 0 30px rgba(255, 107, 107, 0.8), 0 0 60px rgba(255, 107, 107, 0.4);
+        }
+
+        .mouse-reset-guide::before {
+            content: '마우스를 여기로!';
+            position: absolute;
+            top: -40px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            white-space: nowrap;
+            backdrop-filter: blur(10px);
+        }
+
+        .mouse-reset-guide.show {
+            display: block;
+        }
+
+        @keyframes pulseGuide {
+            0%, 100% { 
+                transform: translate(-50%, -50%) scale(1); 
+                opacity: 1; 
+                box-shadow: 0 0 30px rgba(255, 107, 107, 0.8), 0 0 60px rgba(255, 107, 107, 0.4);
+            }
+            50% { 
+                transform: translate(-50%, -50%) scale(1.4); 
+                opacity: 0.8; 
+                box-shadow: 0 0 50px rgba(255, 107, 107, 1), 0 0 100px rgba(255, 107, 107, 0.6);
+            }
+        }
+
+        .transition-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 999;
+            color: white;
+            font-size: clamp(18px, 4vw, 28px);
+            font-weight: 600;
+            text-align: center;
+            backdrop-filter: blur(10px);
+        }
+
+        .transition-overlay.show {
+            display: flex;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .transition-message {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px 40px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(20px);
+        }
+
+        /* 모바일 최적화 */
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+            }
+            
+            .reaction-zone {
+                font-size: 16px;
+                width: 140px;
+                height: 70px;
+            }
+            
+            .user-info {
+                flex-direction: column;
+                width: 100%;
+            }
+            
+            .user-info input, .user-info select {
+                width: 100%;
+                max-width: 280px;
+            }
+            
+            .category-stats {
+                grid-template-columns: 1fr;
+                gap: 15px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .content-area {
+                min-height: 300px;
+                padding: 25px;
+            }
+            
+            .reaction-zone {
+                width: 120px;
+                height: 60px;
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="custom-cursor" id="cursor"></div>
+    
+    <!-- 마우스 중앙 가이드 -->
+    <div class="mouse-reset-guide" id="mouseGuide"></div>
+    
+    <!-- 전환 오버레이 -->
+    <div class="transition-overlay" id="transitionOverlay">
+        <div class="transition-message" id="transitionMessage">
+            다음 항목을 준비중입니다...
+        </div>
+    </div>
+    
+    <div class="participant-count" id="participantCount">
+        총 참여자: 0명
+    </div>
+    
+    <div class="container">
+        <div class="reaction-zone like-zone" id="likeZone">
+            👍 좋아요
+        </div>
+        
+        <div class="reaction-zone dislike-zone" id="dislikeZone">
+            👎 싫어요
+        </div>
+        
+        <div class="content-area" id="contentArea">
+            <div class="instruction">
+                <strong>무의식 편향 측정 실험</strong><br><br>
+                마우스를 자연스럽게 움직여주세요.<br>
+                화면에 나타나는 단어나 이미지에 대한<br>
+                첫 번째 반응을 측정합니다.
+            </div>
+            
+            <div class="user-info">
+                <select id="userAge">
+                    <option value="">연령대 선택</option>
+                    <option value="10s">10대</option>
+                    <option value="20s">20대</option>
+                    <option value="30s">30대</option>
+                    <option value="40s">40대</option>
+                    <option value="50s">50대</option>
+                    <option value="60s">60대</option>
+                    <option value="70s">70대 이상</option>
+                </select>
+                <select id="userGender">
+                    <option value="">성별 선택</option>
+                    <option value="male">남성</option>
+                    <option value="female">여성</option>
+                    <option value="other">기타</option>
+                </select>
+                <select id="userRegion">
+                    <option value="">지역 선택</option>
+                    <option value="seoul">서울</option>
+                    <option value="gyeonggi">경기</option>
+                    <option value="busan">부산</option>
+                    <option value="daegu">대구</option>
+                    <option value="incheon">인천</option>
+                    <option value="gwangju">광주</option>
+                    <option value="daejeon">대전</option>
+                    <option value="ulsan">울산</option>
+                    <option value="other">기타</option>
+                </select>
+            </div>
+            
+            <button class="start-button" onclick="startTest()">테스트 시작</button>
+            <button class="start-button" onclick="showStats()">통계 보기</button>
+        </div>
+
+        <div class="results" id="results">
+            <h2>테스트 결과</h2>
+            <div id="resultContent"></div>
+            <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 20px;">
+                <button class="start-button" onclick="restartTest()">다시 테스트</button>
+                <button class="start-button" style="background: linear-gradient(135deg, #6c757d, #495057);" onclick="finishTest()">그만하기</button>
+            </div>
+        </div>
+
+        <!-- 마무리 메시지 -->
+        <div class="results" id="finishMessage" style="display: none;">
+            <div style="text-align: center; padding: 40px;">
+                <div style="font-size: 48px; margin-bottom: 20px;">🎉</div>
+                <h2 style="color: #2c3e50; margin-bottom: 20px;">수고하셨습니다!</h2>
+                <p style="font-size: 18px; color: #666; line-height: 1.6; margin-bottom: 30px;">
+                    무의식 편향 측정 실험에 참여해 주셔서 감사합니다.<br>
+                    당신의 소중한 데이터가 더 나은 사회를 만드는 데 도움이 될 것입니다.
+                </p>
+                <div style="background: #f8f9fa; padding: 20px; border-radius: 15px; margin: 20px 0;">
+                    <p style="font-size: 16px; color: #495057;">
+                        💡 <strong>기억하세요:</strong><br>
+                        편향을 인식하는 것이 더 공정한 사회를 만드는 첫걸음입니다.
+                    </p>
+                </div>
+                <button class="start-button" onclick="goToHome()" style="background: linear-gradient(135deg, #28a745, #20c997);">
+                    처음으로 돌아가기
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 전체 테스트 항목 풀
+        const allTestItems = [
+            { text: "기독교", type: "religion", emoji: "✝️" },
+            { text: "이슬람", type: "religion", emoji: "☪️" },
+            { text: "불교", type: "religion", emoji: "☸️" },
+            { text: "힌두교", type: "religion", emoji: "🕉️" },
+            { text: "백인", type: "race", emoji: "👱" },
+            { text: "흑인", type: "race", emoji: "👤" },
+            { text: "아시아인", type: "race", emoji: "👨" },
+            { text: "여성", type: "gender", emoji: "👩" },
+            { text: "남성", type: "gender", emoji: "👨" },
+            { text: "성소수자", type: "gender", emoji: "🏳️‍🌈" },
+            { text: "노인", type: "age", emoji: "👴" },
+            { text: "청소년", type: "age", emoji: "👦" },
+            { text: "장애인", type: "disability", emoji: "♿" },
+            { text: "무신론자", type: "religion", emoji: "🤔" },
+            { text: "히잡", type: "religion", emoji: "🧕" },
+            { text: "중국인", type: "race", emoji: "🇨🇳" },
+            { text: "일본인", type: "race", emoji: "🇯🇵" },
+            { text: "미국인", type: "race", emoji: "🇺🇸" },
+            { text: "무슬림", type: "religion", emoji: "🕌" },
+            { text: "동성애자", type: "gender", emoji: "🏳️‍🌈" }
+        ];
+
+        // 랜덤으로 3개 선택하는 함수
+        function getRandomTestItems(count = 3) {
+            const shuffled = [...allTestItems];
+            shuffleArray(shuffled);
+            return shuffled.slice(0, count);
+        }
+
+        // 현재 테스트에 사용할 항목들 (테스트 시작 시 랜덤 생성)
+        let testItems = [];
+
+        // 전역 변수
+        let currentTest = 0;
+        let testResults = [];
+        let testActive = false;
+        let mousePositions = [];
+        let testStartTime;
+        let currentUserData = {};
+
+        // 참여자 수 업데이트
+        function updateParticipantCount() {
+            try {
+                const stored = localStorage.getItem('biasTestData');
+                const data = stored ? JSON.parse(stored) : [];
+                const countEl = document.getElementById('participantCount');
+                if (countEl) {
+                    countEl.textContent = `총 참여자: ${data.length}명`;
+                }
+            } catch (error) {
+                console.error('참여자 수 업데이트 오류:', error);
+            }
+        }
+
+        // 전환 메시지 표시
+        function showTransitionMessage(message, duration = 2000) {
+            return new Promise((resolve) => {
+                const overlay = document.getElementById('transitionOverlay');
+                const messageEl = document.getElementById('transitionMessage');
+                
+                if (overlay && messageEl) {
+                    messageEl.innerHTML = message;
+                    overlay.classList.add('show');
+                    
+                    setTimeout(() => {
+                        overlay.classList.remove('show');
+                        resolve();
+                    }, duration);
+                } else {
+                    resolve();
+                }
+            });
+        }
+
+        // 마우스 중앙 가이드 (간단 버전)
+        function showMouseGuide(duration = 4000) {
+            return new Promise((resolve) => {
+                const guide = document.getElementById('mouseGuide');
+                if (!guide) {
+                    resolve();
+                    return;
+                }
+                
+                guide.classList.add('show');
+                
+                setTimeout(() => {
+                    guide.classList.remove('show');
+                    resolve();
+                }, duration);
+            });
+        }
+
+        // 마우스를 화면 중앙으로 가이드 (간단 버전)
+        function resetMousePosition() {
+            return new Promise((resolve) => {
+                // 전환 메시지 표시
+                showTransitionMessage('마우스를 화면 정중앙(빨간 점)으로 이동해주세요', 2000).then(() => {
+                    // 중앙 가이드 표시
+                    return showMouseGuide(4000);
+                }).then(() => {
+                    // 완료 메시지
+                    return showTransitionMessage('준비 완료!', 1000);
+                }).then(() => {
+                    resolve();
+                });
+            });
+        }
+
+        // 마우스 추적
+        document.addEventListener('mousemove', function(e) {
+            const cursor = document.getElementById('cursor');
+            if (cursor) {
+                cursor.style.left = e.clientX - 12 + 'px';
+                cursor.style.top = e.clientY - 12 + 'px';
+            }
+            
+            if (testActive) {
+                const timestamp = Date.now() - testStartTime;
+                mousePositions.push({ x: e.clientX, y: e.clientY, timestamp });
+            }
+        });
+
+        // 테스트 시작
+        function startTest() {
+            console.log('테스트 시작 함수 호출됨');
+            
+            const age = document.getElementById('userAge').value;
+            const gender = document.getElementById('userGender').value;
+            const region = document.getElementById('userRegion').value;
+            
+            if (!age || !gender || !region) {
+                alert('연령대, 성별, 지역을 모두 선택해주세요.');
+                return;
+            }
+
+            currentUserData = {
+                age: age, // 이제 문자열 (예: "20s", "30s")
+                gender: gender,
+                region: region,
+                timestamp: new Date().toISOString(),
+                testResults: []
+            };
+
+            // 시작 준비
+            showTransitionMessage('테스트를 시작합니다...', 2000).then(() => {
+                return resetMousePosition();
+            }).then(() => {
+                // 랜덤으로 3개 항목 선택
+                testItems = getRandomTestItems(3);
+                
+                // 버튼들 표시
+                document.getElementById('likeZone').classList.add('show');
+                document.getElementById('dislikeZone').classList.add('show');
+                document.getElementById('cursor').classList.add('show');
+
+                testActive = true;
+                currentTest = 0;
+                testResults = [];
+                document.body.classList.add('hide-cursor');
+                
+                // 이미 랜덤으로 선택했으므로 추가 섞기는 생략
+                showNextItem();
+            });
+        }
+
+        // 다음 항목 표시 (간단 버전)
+        function showNextItem() {
+            if (currentTest >= testItems.length) {
+                showResults();
+                return;
+            }
+
+            // 첫 번째 항목이 아니면 마우스 리셋 가이드
+            if (currentTest > 0) {
+                showTransitionMessage(`${currentTest + 1}번째 항목`, 1500).then(() => {
+                    return resetMousePosition();
+                }).then(() => {
+                    showCurrentItem();
+                });
+            } else {
+                showCurrentItem();
+            }
+        }
+
+        function showCurrentItem() {
+            const item = testItems[currentTest];
+            const contentArea = document.getElementById('contentArea');
+            
+            // 랜덤 위치 설정
+            const isLikeOnRight = Math.random() > 0.5;
+            const likeZone = document.getElementById('likeZone');
+            const dislikeZone = document.getElementById('dislikeZone');
+            
+            if (likeZone && dislikeZone) {
+                if (isLikeOnRight) {
+                    likeZone.style.right = 'clamp(10px, 3vw, 30px)';
+                    likeZone.style.left = 'auto';
+                    dislikeZone.style.left = 'clamp(10px, 3vw, 30px)';
+                    dislikeZone.style.right = 'auto';
+                } else {
+                    likeZone.style.left = 'clamp(10px, 3vw, 30px)';
+                    likeZone.style.right = 'auto';
+                    dislikeZone.style.right = 'clamp(10px, 3vw, 30px)';
+                    dislikeZone.style.left = 'auto';
+                }
+            }
+            
+            window.currentLayout = { isLikeOnRight };
+            mousePositions = [];
+            testStartTime = Date.now();
+            
+            contentArea.innerHTML = `
+                <div class="content-image">${item.emoji}</div>
+                <div class="content-text">${item.text}</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: ${(currentTest / testItems.length) * 100}%"></div>
+                </div>
+                <div class="timer" id="timer">3.0</div>
+            `;
+
+            let timeLeft = 3.0;
+            const timerInterval = setInterval(() => {
+                timeLeft -= 0.1;
+                const timer = document.getElementById('timer');
+                if (timer) {
+                    timer.textContent = timeLeft.toFixed(1);
+                }
+                
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                    analyzeMouseMovement();
+                    currentTest++;
+                    setTimeout(() => showNextItem(), 300);
+                }
+            }, 100);
+        }
+
+        // 마우스 움직임 분석
+        function analyzeMouseMovement() {
+            if (mousePositions.length === 0) {
+                testResults.push({ 
+                    item: testItems[currentTest], 
+                    result: 'neutral', 
+                    confidence: 0
+                });
+                return;
+            }
+
+            const likeZone = document.getElementById('likeZone').getBoundingClientRect();
+            const dislikeZone = document.getElementById('dislikeZone').getBoundingClientRect();
+            
+            let likeScore = 0;
+            let dislikeScore = 0;
+
+            mousePositions.forEach(pos => {
+                const distanceToLike = Math.sqrt(
+                    Math.pow(pos.x - (likeZone.left + likeZone.width/2), 2) +
+                    Math.pow(pos.y - (likeZone.top + likeZone.height/2), 2)
+                );
+                
+                const distanceToDislike = Math.sqrt(
+                    Math.pow(pos.x - (dislikeZone.left + dislikeZone.width/2), 2) +
+                    Math.pow(pos.y - (dislikeZone.top + dislikeZone.height/2), 2)
+                );
+
+                if (distanceToLike < 300) likeScore += (300 - distanceToLike) / 300;
+                if (distanceToDislike < 300) dislikeScore += (300 - distanceToDislike) / 300;
+            });
+
+            let result = 'neutral';
+            let confidence = 0;
+
+            if (likeScore > dislikeScore && likeScore > 0.5) {
+                result = 'like';
+                confidence = Math.min(likeScore / (likeScore + dislikeScore), 1);
+            } else if (dislikeScore > likeScore && dislikeScore > 0.5) {
+                result = 'dislike';
+                confidence = Math.min(dislikeScore / (likeScore + dislikeScore), 1);
+            }
+
+            testResults.push({
+                item: testItems[currentTest],
+                result: result,
+                confidence: confidence
+            });
+
+            // 피드백
+            if (result === 'like') {
+                document.getElementById('likeZone').classList.add('active');
+                setTimeout(() => document.getElementById('likeZone').classList.remove('active'), 200);
+            } else if (result === 'dislike') {
+                document.getElementById('dislikeZone').classList.add('active');
+                setTimeout(() => document.getElementById('dislikeZone').classList.remove('active'), 200);
+            }
+        }
+
+        // 결과 표시
+        function showResults() {
+            testActive = false;
+            document.body.classList.remove('hide-cursor');
+            
+            // 버튼 숨기기
+            document.getElementById('likeZone').classList.remove('show');
+            document.getElementById('dislikeZone').classList.remove('show');
+            document.getElementById('cursor').classList.remove('show');
+            
+            currentUserData.testResults = testResults;
+            
+            // 로컬 저장
+            const stored = localStorage.getItem('biasTestData');
+            const allData = stored ? JSON.parse(stored) : [];
+            allData.push(currentUserData);
+            localStorage.setItem('biasTestData', JSON.stringify(allData));
+            
+            updateParticipantCount();
+            
+            document.getElementById('contentArea').style.display = 'none';
+            
+            const resultsDiv = document.getElementById('results');
+            const resultContent = document.getElementById('resultContent');
+            
+            let html = '<h3>당신의 무의식적 반응 분석</h3><br>';
+            
+            const categories = {};
+            testResults.forEach(result => {
+                if (!categories[result.item.type]) {
+                    categories[result.item.type] = { like: 0, dislike: 0, neutral: 0 };
+                }
+                categories[result.item.type][result.result]++;
+            });
+
+            html += '<div class="category-stats">';
+            Object.keys(categories).forEach(category => {
+                const categoryData = categories[category];
+                const total = categoryData.like + categoryData.dislike + categoryData.neutral;
+                
+                html += `<div class="category-card">`;
+                html += `<strong>${getCategoryName(category)}</strong><br>`;
+                html += `<small>긍정: ${Math.round(categoryData.like/total*100)}% | `;
+                html += `부정: ${Math.round(categoryData.dislike/total*100)}% | `;
+                html += `중립: ${Math.round(categoryData.neutral/total*100)}%</small>`;
+                html += `</div>`;
+            });
+            html += '</div>';
+
+            html += '<br><div style="font-size: 14px; color: #666; line-height: 1.6;">';
+            html += '✅ 데이터가 저장되었습니다.<br>';
+            html += '이 결과는 무의식적인 마우스 움직임을 바탕으로 한 것입니다.';
+            html += '</div>';
+
+            resultContent.innerHTML = html;
+            resultsDiv.classList.add('show');
+        }
+
+        // 통계 보기 (그래프 버전)
+        function showStats() {
+            const stored = localStorage.getItem('biasTestData');
+            const allData = stored ? JSON.parse(stored) : [];
+            
+            if (allData.length === 0) {
+                alert('아직 데이터가 없습니다.');
+                return;
+            }
+
+            // 컨텐츠 영역 숨기기
+            document.getElementById('contentArea').style.display = 'none';
+            
+            // 결과 div 사용해서 통계 표시
+            const resultsDiv = document.getElementById('results');
+            const resultContent = document.getElementById('resultContent');
+
+            let html = `
+                <button class="close-button" onclick="goToHome()">×</button>
+                <div class="stats-summary">
+                    <h3>📊 전체 참여자 통계</h3>
+                    <p style="font-size: 18px; color: #495057;">총 <strong>${allData.length}명</strong>이 참여했습니다</p>
+                </div>
+            `;
+
+            // 전체 통계 생성
+            const allCategories = {};
+            allData.forEach(userData => {
+                userData.testResults.forEach(result => {
+                    if (!allCategories[result.item.type]) {
+                        allCategories[result.item.type] = { like: 0, dislike: 0, neutral: 0 };
+                    }
+                    allCategories[result.item.type][result.result]++;
+                });
+            });
+
+            html += '<div class="category-stats">';
+            Object.keys(allCategories).forEach(category => {
+                const categoryData = allCategories[category];
+                const total = categoryData.like + categoryData.dislike + categoryData.neutral;
+                
+                const likePercent = Math.round((categoryData.like / total) * 100);
+                const dislikePercent = Math.round((categoryData.dislike / total) * 100);
+                const neutralPercent = Math.round((categoryData.neutral / total) * 100);
+                
+                html += `<div class="category-card">`;
+                html += `<div class="category-title">${getCategoryIcon(category)} ${getCategoryName(category)}</div>`;
+                html += `<div class="chart-container">`;
+                
+                // 긍정 바
+                html += `<div class="chart-bar">`;
+                html += `<div class="chart-label">😊 긍정</div>`;
+                html += `<div class="chart-progress">`;
+                html += `<div class="chart-fill positive" style="width: ${likePercent}%"></div>`;
+                html += `</div>`;
+                html += `<div class="chart-percentage">${likePercent}%</div>`;
+                html += `</div>`;
+                
+                // 부정 바
+                html += `<div class="chart-bar">`;
+                html += `<div class="chart-label">😔 부정</div>`;
+                html += `<div class="chart-progress">`;
+                html += `<div class="chart-fill negative" style="width: ${dislikePercent}%"></div>`;
+                html += `</div>`;
+                html += `<div class="chart-percentage">${dislikePercent}%</div>`;
+                html += `</div>`;
+                
+                // 중립 바
+                html += `<div class="chart-bar">`;
+                html += `<div class="chart-label">😐 중립</div>`;
+                html += `<div class="chart-progress">`;
+                html += `<div class="chart-fill neutral" style="width: ${neutralPercent}%"></div>`;
+                html += `</div>`;
+                html += `<div class="chart-percentage">${neutralPercent}%</div>`;
+                html += `</div>`;
+                
+                html += `</div>`; // chart-container
+                html += `</div>`; // category-card
+            });
+            html += '</div>';
+
+            // 하단 버튼
+            html += '<div style="margin-top: 40px; padding-top: 30px; border-top: 2px solid rgba(0,0,0,0.05);">';
+            html += '<button class="start-button" onclick="goToHome()" style="background: linear-gradient(135deg, #28a745, #20c997); font-size: 16px; padding: 15px 30px;">✨ 처음으로 돌아가기</button>';
+            html += '</div>';
+
+            resultContent.innerHTML = html;
+            resultsDiv.style.display = 'block';
+            resultsDiv.classList.add('show');
+            
+            // 애니메이션 지연 적용
+            setTimeout(() => {
+                const fills = document.querySelectorAll('.chart-fill');
+                fills.forEach((fill, index) => {
+                    setTimeout(() => {
+                        fill.style.width = fill.style.width; // 애니메이션 트리거
+                    }, index * 100);
+                });
+            }, 300);
+        }
+
+        // 카테고리별 아이콘
+        function getCategoryIcon(category) {
+            const icons = {
+                'religion': '🙏',
+                'race': '🌍', 
+                'gender': '👥',
+                'age': '📅',
+                'disability': '♿'
+            };
+            return icons[category] || '📊';
+        }
+
+        // 다시 테스트
+        function restartTest() {
+            document.getElementById('results').classList.remove('show');
+            document.getElementById('contentArea').style.display = 'flex';
+            document.getElementById('contentArea').innerHTML = `
+                <div class="instruction">
+                    <strong>무의식 편향 측정 실험</strong><br><br>
+                    마우스를 자연스럽게 움직여주세요.<br>
+                    화면에 나타나는 단어나 이미지에 대한<br>
+                    첫 번째 반응을 측정합니다.
+                </div>
+                
+                <div class="user-info">
+                    <select id="userAge">
+                        <option value="">연령대 선택</option>
+                        <option value="10s">10대</option>
+                        <option value="20s">20대</option>
+                        <option value="30s">30대</option>
+                        <option value="40s">40대</option>
+                        <option value="50s">50대</option>
+                        <option value="60s">60대</option>
+                        <option value="70s">70대 이상</option>
+                    </select>
+                    <select id="userGender">
+                        <option value="">성별 선택</option>
+                        <option value="male">남성</option>
+                        <option value="female">여성</option>
+                        <option value="other">기타</option>
+                    </select>
+                    <select id="userRegion">
+                        <option value="">지역 선택</option>
+                        <option value="seoul">서울</option>
+                        <option value="gyeonggi">경기</option>
+                        <option value="busan">부산</option>
+                        <option value="daegu">대구</option>
+                        <option value="incheon">인천</option>
+                        <option value="gwangju">광주</option>
+                        <option value="daejeon">대전</option>
+                        <option value="ulsan">울산</option>
+                        <option value="other">기타</option>
+                    </select>
+                </div>
+                
+                <button class="start-button" onclick="startTest()">테스트 시작</button>
+                <button class="start-button" onclick="showStats()">통계 보기</button>
+            `;
+        }
+
+        // 유틸리티 함수
+        function getCategoryName(category) {
+            const names = {
+                'religion': '종교',
+                'race': '인종',
+                'gender': '성별/성향',
+                'age': '연령',
+                'disability': '장애'
+            };
+            return names[category] || category;
+        }
+
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+
+        // 테스트 완전히 끝내기
+        function finishTest() {
+            // 결과 화면 숨기기
+            document.getElementById('results').classList.remove('show');
+            document.getElementById('results').style.display = 'none';
+            
+            // 컨텐츠 영역도 숨기기
+            document.getElementById('contentArea').style.display = 'none';
+            
+            // 마무리 메시지 표시
+            const finishMessage = document.getElementById('finishMessage');
+            finishMessage.style.display = 'block';
+            finishMessage.classList.add('show');
+        }
+
+        // 처음으로 돌아가기
+        function goToHome() {
+            // 모든 결과 화면 숨기기
+            const finishMessage = document.getElementById('finishMessage');
+            const results = document.getElementById('results');
+            
+            if (finishMessage) {
+                finishMessage.classList.remove('show');
+                finishMessage.style.display = 'none';
+            }
+            
+            if (results) {
+                results.classList.remove('show');
+                results.style.display = 'none';
+            }
+            
+            // 컨텐츠 영역 다시 표시
+            document.getElementById('contentArea').style.display = 'flex';
+            document.getElementById('contentArea').innerHTML = `
+                <div class="instruction">
+                    <strong>무의식 편향 측정 실험</strong><br><br>
+                    마우스를 자연스럽게 움직여주세요.<br>
+                    화면에 나타나는 단어나 이미지에 대한<br>
+                    첫 번째 반응을 측정합니다.
+                </div>
+                
+                <div class="user-info">
+                    <select id="userAge">
+                        <option value="">연령대 선택</option>
+                        <option value="10s">10대</option>
+                        <option value="20s">20대</option>
+                        <option value="30s">30대</option>
+                        <option value="40s">40대</option>
+                        <option value="50s">50대</option>
+                        <option value="60s">60대</option>
+                        <option value="70s">70대 이상</option>
+                    </select>
+                    <select id="userGender">
+                        <option value="">성별 선택</option>
+                        <option value="male">남성</option>
+                        <option value="female">여성</option>
+                        <option value="other">기타</option>
+                    </select>
+                    <select id="userRegion">
+                        <option value="">지역 선택</option>
+                        <option value="seoul">서울</option>
+                        <option value="gyeonggi">경기</option>
+                        <option value="busan">부산</option>
+                        <option value="daegu">대구</option>
+                        <option value="incheon">인천</option>
+                        <option value="gwangju">광주</option>
+                        <option value="daejeon">대전</option>
+                        <option value="ulsan">울산</option>
+                        <option value="other">기타</option>
+                    </select>
+                </div>
+                
+                <button class="start-button" onclick="startTest()">테스트 시작</button>
+                <button class="start-button" onclick="showStats()">통계 보기</button>
+            `;
+        }
+        window.addEventListener('load', function() {
+            console.log('페이지 로드 완료');
+            updateParticipantCount();
+        });
+    </script>
+</body>
+</html>
