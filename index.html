@@ -377,11 +377,6 @@
             animation: shimmer 2s infinite;
         }
 
-        @keyframes shimmer {
-            0% { left: -100%; }
-            100% { left: 100%; }
-        }
-
         .chart-percentage {
             font-weight: 700;
             min-width: 45px;
@@ -728,6 +723,10 @@
         </div>
     </div>
 
+    <!-- Firebase SDK -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.23.0/firebase-app-compat.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.23.0/firebase-firestore-compat.min.js"></script>
+
     <script>
         // 전체 테스트 항목 풀
         const allTestItems = [
@@ -770,19 +769,153 @@
         let mousePositions = [];
         let testStartTime;
         let currentUserData = {};
+        let db = null;
+        let isFirebaseConnected = false;
 
-        // 참여자 수 업데이트
-        function updateParticipantCount() {
+        // Firebase 설정 (하드코딩)
+        const firebaseConfig = {
+            apiKey: "AIzaSyCctF9pieWY9xMyFBn0z9IME1X0Y8WAFpE",
+            authDomain: "unconscious-bias-test.firebaseapp.com",
+            projectId: "unconscious-bias-test",
+            storageBucket: "unconscious-bias-test.firebasestorage.app",
+            messagingSenderId: "109108368159",
+            appId: "1:109108368159:web:144d1b15f915b9016172e2"
+        };
+
+        // Firebase 초기화
+        function initializeFirebase() {
             try {
-                const stored = localStorage.getItem('biasTestData');
-                const data = stored ? JSON.parse(stored) : [];
-                const countEl = document.getElementById('participantCount');
-                if (countEl) {
-                    countEl.textContent = `총 참여자: ${data.length}명`;
+                if (!firebase.apps.length) {
+                    firebase.initializeApp(firebaseConfig);
                 }
+                db = firebase.firestore();
+                
+                // 오프라인 지원 활성화
+                db.enableNetwork().then(() => {
+                    isFirebaseConnected = true;
+                    updateFirebaseStatus('Firebase 연결됨', true);
+                    loadParticipantCount();
+                    console.log('Firebase 연결 성공!');
+                }).catch((error) => {
+                    console.log('Firebase 온라인 연결 실패, 로컬 모드 사용:', error);
+                    isFirebaseConnected = false;
+                    updateFirebaseStatus('로컬 모드', false);
+                    loadParticipantCountLocal();
+                });
             } catch (error) {
-                console.error('참여자 수 업데이트 오류:', error);
+                console.error('Firebase 초기화 실패:', error);
+                isFirebaseConnected = false;
+                updateFirebaseStatus('연결 실패', false);
+                loadParticipantCountLocal();
             }
+        }
+
+        // Firebase 상태 업데이트
+        function updateFirebaseStatus(text, connected) {
+            const statusText = document.getElementById('statusText');
+            const dot = document.getElementById('statusDot');
+            
+            if (statusText) {
+                statusText.textContent = text;
+            }
+            if (dot) {
+                if (connected) {
+                    dot.classList.add('connected');
+                } else {
+                    dot.classList.remove('connected');
+                }
+            }
+        }
+
+        // 참여자 수 로드 (Firebase 우선, 로컬 백업)
+        function loadParticipantCount() {
+            if (!isFirebaseConnected || !db) {
+                loadParticipantCountLocal();
+                return;
+            }
+            
+            db.collection('participants').get().then((querySnapshot) => {
+                const firebaseCount = querySnapshot.size;
+                
+                const participantEl = document.getElementById('participantCount');
+                if (participantEl) {
+                    participantEl.innerHTML = `총 참여자: ${firebaseCount}명 (Firebase)`;
+                }
+            }).catch((error) => {
+                console.error('Firebase 참여자 수 로드 실패:', error);
+                loadParticipantCountLocal();
+            });
+        }
+
+        // 참여자 수 로드 (로컬만)
+        function loadParticipantCountLocal() {
+            const stored = localStorage.getItem('biasTestData');
+            const localData = stored ? JSON.parse(stored) : [];
+            const participantEl = document.getElementById('participantCount');
+            if (participantEl) {
+                participantEl.innerHTML = `총 참여자: ${localData.length}명 (로컬)`;
+            }
+        }
+
+        // 데이터 저장 (Firebase 우선, 로컬 백업)
+        function saveData(userData) {
+            // 로컬 저장 (백업용)
+            const stored = localStorage.getItem('biasTestData');
+            const allData = stored ? JSON.parse(stored) : [];
+            allData.push(userData);
+            localStorage.setItem('biasTestData', JSON.stringify(allData));
+
+            // Firebase 저장 (메인)
+            if (isFirebaseConnected && db) {
+                db.collection('participants').add({
+                    ...userData,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                }).then((docRef) => {
+                    console.log('Firebase 저장 성공:', docRef.id);
+                    loadParticipantCount();
+                }).catch((error) => {
+                    console.error('Firebase 저장 실패:', error);
+                    console.log('로컬 저장은 완료됨');
+                    loadParticipantCountLocal();
+                });
+            } else {
+                console.log('Firebase 미연결 - 로컬 저장만 완료');
+                loadParticipantCountLocal();
+            }
+        }
+
+        // 모든 데이터 로드 (Firebase + 로컬 통합)
+        function loadAllData() {
+            return new Promise((resolve, reject) => {
+                const localPromise = new Promise((res) => {
+                    const stored = localStorage.getItem('biasTestData');
+                    const localData = stored ? JSON.parse(stored) : [];
+                    res(localData);
+                });
+
+                if (isFirebaseConnected && db) {
+                    const firebasePromise = db.collection('participants').get().then((querySnapshot) => {
+                        const firebaseData = [];
+                        querySnapshot.forEach((doc) => {
+                            firebaseData.push(doc.data());
+                        });
+                        return firebaseData;
+                    }).catch(() => []);
+
+                    Promise.all([firebasePromise, localPromise]).then(([firebaseData, localData]) => {
+                        // 간단한 중복 제거 (timestamp 기준)
+                        const allData = [...firebaseData];
+                        localData.forEach(local => {
+                            if (!firebaseData.find(fb => fb.timestamp === local.timestamp)) {
+                                allData.push(local);
+                            }
+                        });
+                        resolve(allData);
+                    }).catch(reject);
+                } else {
+                    localPromise.then(resolve).catch(reject);
+                }
+            });
         }
 
         // 전환 메시지 표시
@@ -867,7 +1000,7 @@
             }
 
             currentUserData = {
-                age: age, // 이제 문자열 (예: "20s", "30s")
+                age: age,
                 gender: gender,
                 region: region,
                 timestamp: new Date().toISOString(),
@@ -918,6 +1051,11 @@
         function showCurrentItem() {
             const item = testItems[currentTest];
             const contentArea = document.getElementById('contentArea');
+            
+            if (!contentArea) {
+                console.error('contentArea 요소를 찾을 수 없습니다.');
+                return;
+            }
             
             // 랜덤 위치 설정
             const isLikeOnRight = Math.random() > 0.5;
@@ -1040,8 +1178,6 @@
             currentUserData.testResults = testResults;
             saveData(currentUserData);
             
-            updateParticipantCount();
-            
             document.getElementById('contentArea').style.display = 'none';
             
             const resultsDiv = document.getElementById('results');
@@ -1072,8 +1208,9 @@
             html += '</div>';
 
             html += '<br><div style="font-size: 14px; color: #666; line-height: 1.6;">';
-            html += '✅ 데이터가 저장되었습니다.<br>';
-            html += '이 결과는 무의식적인 마우스 움직임을 바탕으로 한 것입니다.';
+            html += `✅ 데이터가 ${isFirebaseConnected ? 'Firebase에 안전하게' : '로컬에'} 저장되었습니다.<br>`;
+            html += '이 결과는 무의식적인 마우스 움직임을 바탕으로 한 것입니다.<br>';
+            html += '편향을 인식하는 것이 더 공정한 사회를 만드는 첫걸음입니다.';
             html += '</div>';
 
             resultContent.innerHTML = html;
@@ -1198,73 +1335,6 @@
             return icons[category] || '📊';
         }
 
-        // 다시 테스트
-        function restartTest() {
-            document.getElementById('results').classList.remove('show');
-            document.getElementById('contentArea').style.display = 'flex';
-            document.getElementById('contentArea').innerHTML = `
-                <div class="instruction">
-                    <strong>무의식 편향 측정 실험</strong><br><br>
-                    마우스를 자연스럽게 움직여주세요.<br>
-                    화면에 나타나는 단어나 이미지에 대한<br>
-                    첫 번째 반응을 측정합니다.
-                </div>
-                
-                <div class="user-info">
-                    <select id="userAge">
-                        <option value="">연령대 선택</option>
-                        <option value="10s">10대</option>
-                        <option value="20s">20대</option>
-                        <option value="30s">30대</option>
-                        <option value="40s">40대</option>
-                        <option value="50s">50대</option>
-                        <option value="60s">60대</option>
-                        <option value="70s">70대 이상</option>
-                    </select>
-                    <select id="userGender">
-                        <option value="">성별 선택</option>
-                        <option value="male">남성</option>
-                        <option value="female">여성</option>
-                        <option value="other">기타</option>
-                    </select>
-                    <select id="userRegion">
-                        <option value="">지역 선택</option>
-                        <option value="seoul">서울</option>
-                        <option value="gyeonggi">경기</option>
-                        <option value="busan">부산</option>
-                        <option value="daegu">대구</option>
-                        <option value="incheon">인천</option>
-                        <option value="gwangju">광주</option>
-                        <option value="daejeon">대전</option>
-                        <option value="ulsan">울산</option>
-                        <option value="other">기타</option>
-                    </select>
-                </div>
-                
-                <button class="start-button" onclick="startTest()">테스트 시작</button>
-                <button class="start-button" onclick="showStats()">통계 보기</button>
-            `;
-        }
-
-        // 유틸리티 함수
-        function getCategoryName(category) {
-            const names = {
-                'religion': '종교',
-                'race': '인종',
-                'gender': '성별/성향',
-                'age': '연령',
-                'disability': '장애'
-            };
-            return names[category] || category;
-        }
-
-        function shuffleArray(array) {
-            for (let i = array.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [array[i], array[j]] = [array[j], array[i]];
-            }
-        }
-
         // 테스트 완전히 끝내기
         function finishTest() {
             // 결과 화면 숨기기
@@ -1341,9 +1411,78 @@
                 <button class="start-button" onclick="showStats()">통계 보기</button>
             `;
         }
+
+        // 다시 테스트
+        function restartTest() {
+            document.getElementById('results').classList.remove('show');
+            document.getElementById('contentArea').style.display = 'flex';
+            document.getElementById('contentArea').innerHTML = `
+                <div class="instruction">
+                    <strong>무의식 편향 측정 실험</strong><br><br>
+                    마우스를 자연스럽게 움직여주세요.<br>
+                    화면에 나타나는 단어나 이미지에 대한<br>
+                    첫 번째 반응을 측정합니다.
+                </div>
+                
+                <div class="user-info">
+                    <select id="userAge">
+                        <option value="">연령대 선택</option>
+                        <option value="10s">10대</option>
+                        <option value="20s">20대</option>
+                        <option value="30s">30대</option>
+                        <option value="40s">40대</option>
+                        <option value="50s">50대</option>
+                        <option value="60s">60대</option>
+                        <option value="70s">70대 이상</option>
+                    </select>
+                    <select id="userGender">
+                        <option value="">성별 선택</option>
+                        <option value="male">남성</option>
+                        <option value="female">여성</option>
+                        <option value="other">기타</option>
+                    </select>
+                    <select id="userRegion">
+                        <option value="">지역 선택</option>
+                        <option value="seoul">서울</option>
+                        <option value="gyeonggi">경기</option>
+                        <option value="busan">부산</option>
+                        <option value="daegu">대구</option>
+                        <option value="incheon">인천</option>
+                        <option value="gwangju">광주</option>
+                        <option value="daejeon">대전</option>
+                        <option value="ulsan">울산</option>
+                        <option value="other">기타</option>
+                    </select>
+                </div>
+                
+                <button class="start-button" onclick="startTest()">테스트 시작</button>
+                <button class="start-button" onclick="showStats()">통계 보기</button>
+            `;
+        }
+
+        // 유틸리티 함수
+        function getCategoryName(category) {
+            const names = {
+                'religion': '종교',
+                'race': '인종',
+                'gender': '성별/성향',
+                'age': '연령',
+                'disability': '장애'
+            };
+            return names[category] || category;
+        }
+
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+
+        // 페이지 로드 시 초기화
         window.addEventListener('load', function() {
-            console.log('페이지 로드 완료');
-            updateParticipantCount();
+            console.log('페이지 로드 완료 - Firebase 초기화 시작');
+            initializeFirebase();
         });
     </script>
 </body>
