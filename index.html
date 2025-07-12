@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>무의식 편향 측정 </title>
+    <title>무의식 편향 측정</title>
     <style>
         * {
             margin: 0;
@@ -442,6 +442,32 @@
             font-size: clamp(12px, 2.5vw, 16px);
         }
 
+        .firebase-status {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 15px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            backdrop-filter: blur(10px);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #f44336;
+        }
+
+        .status-dot.connected {
+            background: #4CAF50;
+        }
+
         .hide-cursor {
             cursor: none;
         }
@@ -612,6 +638,11 @@
     
     <div class="participant-count" id="participantCount">
         총 참여자: 0명
+    </div>
+
+    <div class="firebase-status" id="firebaseStatus">
+        <div class="status-dot" id="statusDot"></div>
+        <span id="statusText">Firebase 연결 중...</span>
     </div>
     
     <div class="container">
@@ -1007,12 +1038,7 @@
             document.getElementById('cursor').classList.remove('show');
             
             currentUserData.testResults = testResults;
-            
-            // 로컬 저장
-            const stored = localStorage.getItem('biasTestData');
-            const allData = stored ? JSON.parse(stored) : [];
-            allData.push(currentUserData);
-            localStorage.setItem('biasTestData', JSON.stringify(allData));
+            saveData(currentUserData);
             
             updateParticipantCount();
             
@@ -1054,105 +1080,110 @@
             resultsDiv.classList.add('show');
         }
 
-        // 통계 보기 (그래프 버전)
+        // 통계 보기 (Firebase + 로컬 통합)
         function showStats() {
-            const stored = localStorage.getItem('biasTestData');
-            const allData = stored ? JSON.parse(stored) : [];
-            
-            if (allData.length === 0) {
-                alert('아직 데이터가 없습니다.');
-                return;
-            }
+            loadAllData().then((allData) => {
+                if (allData.length === 0) {
+                    alert('아직 데이터가 없습니다.');
+                    return;
+                }
 
-            // 컨텐츠 영역 숨기기
-            document.getElementById('contentArea').style.display = 'none';
-            
-            // 결과 div 사용해서 통계 표시
-            const resultsDiv = document.getElementById('results');
-            const resultContent = document.getElementById('resultContent');
+                // 컨텐츠 영역 숨기기
+                document.getElementById('contentArea').style.display = 'none';
+                
+                // 결과 div 사용해서 통계 표시
+                const resultsDiv = document.getElementById('results');
+                const resultContent = document.getElementById('resultContent');
 
-            let html = `
-                <button class="close-button" onclick="goToHome()">×</button>
-                <div class="stats-summary">
-                    <h3>📊 전체 참여자 통계</h3>
-                    <p style="font-size: 18px; color: #495057;">총 <strong>${allData.length}명</strong>이 참여했습니다</p>
-                </div>
-            `;
+                let html = `
+                    <button class="close-button" onclick="goToHome()">×</button>
+                    <div class="stats-summary">
+                        <h3>📊 전체 참여자 통계</h3>
+                        <p style="font-size: 18px; color: #495057;">총 <strong>${allData.length}명</strong>이 참여했습니다</p>
+                        <p style="font-size: 14px; color: #666; margin-top: 10px;">
+                            ${isFirebaseConnected ? '🔥 Firebase 실시간 데이터' : '💾 로컬 데이터만'}
+                        </p>
+                    </div>
+                `;
 
-            // 전체 통계 생성
-            const allCategories = {};
-            allData.forEach(userData => {
-                userData.testResults.forEach(result => {
-                    if (!allCategories[result.item.type]) {
-                        allCategories[result.item.type] = { like: 0, dislike: 0, neutral: 0 };
-                    }
-                    allCategories[result.item.type][result.result]++;
+                // 전체 통계 생성
+                const allCategories = {};
+                allData.forEach(userData => {
+                    userData.testResults.forEach(result => {
+                        if (!allCategories[result.item.type]) {
+                            allCategories[result.item.type] = { like: 0, dislike: 0, neutral: 0 };
+                        }
+                        allCategories[result.item.type][result.result]++;
+                    });
                 });
-            });
 
-            html += '<div class="category-stats">';
-            Object.keys(allCategories).forEach(category => {
-                const categoryData = allCategories[category];
-                const total = categoryData.like + categoryData.dislike + categoryData.neutral;
-                
-                const likePercent = Math.round((categoryData.like / total) * 100);
-                const dislikePercent = Math.round((categoryData.dislike / total) * 100);
-                const neutralPercent = Math.round((categoryData.neutral / total) * 100);
-                
-                html += `<div class="category-card">`;
-                html += `<div class="category-title">${getCategoryIcon(category)} ${getCategoryName(category)}</div>`;
-                html += `<div class="chart-container">`;
-                
-                // 긍정 바
-                html += `<div class="chart-bar">`;
-                html += `<div class="chart-label">😊 긍정</div>`;
-                html += `<div class="chart-progress">`;
-                html += `<div class="chart-fill positive" style="width: ${likePercent}%"></div>`;
-                html += `</div>`;
-                html += `<div class="chart-percentage">${likePercent}%</div>`;
-                html += `</div>`;
-                
-                // 부정 바
-                html += `<div class="chart-bar">`;
-                html += `<div class="chart-label">😔 부정</div>`;
-                html += `<div class="chart-progress">`;
-                html += `<div class="chart-fill negative" style="width: ${dislikePercent}%"></div>`;
-                html += `</div>`;
-                html += `<div class="chart-percentage">${dislikePercent}%</div>`;
-                html += `</div>`;
-                
-                // 중립 바
-                html += `<div class="chart-bar">`;
-                html += `<div class="chart-label">😐 중립</div>`;
-                html += `<div class="chart-progress">`;
-                html += `<div class="chart-fill neutral" style="width: ${neutralPercent}%"></div>`;
-                html += `</div>`;
-                html += `<div class="chart-percentage">${neutralPercent}%</div>`;
-                html += `</div>`;
-                
-                html += `</div>`; // chart-container
-                html += `</div>`; // category-card
-            });
-            html += '</div>';
-
-            // 하단 버튼
-            html += '<div style="margin-top: 40px; padding-top: 30px; border-top: 2px solid rgba(0,0,0,0.05);">';
-            html += '<button class="start-button" onclick="goToHome()" style="background: linear-gradient(135deg, #28a745, #20c997); font-size: 16px; padding: 15px 30px;">✨ 처음으로 돌아가기</button>';
-            html += '</div>';
-
-            resultContent.innerHTML = html;
-            resultsDiv.style.display = 'block';
-            resultsDiv.classList.add('show');
-            
-            // 애니메이션 지연 적용
-            setTimeout(() => {
-                const fills = document.querySelectorAll('.chart-fill');
-                fills.forEach((fill, index) => {
-                    setTimeout(() => {
-                        fill.style.width = fill.style.width; // 애니메이션 트리거
-                    }, index * 100);
+                html += '<div class="category-stats">';
+                Object.keys(allCategories).forEach(category => {
+                    const categoryData = allCategories[category];
+                    const total = categoryData.like + categoryData.dislike + categoryData.neutral;
+                    
+                    const likePercent = Math.round((categoryData.like / total) * 100);
+                    const dislikePercent = Math.round((categoryData.dislike / total) * 100);
+                    const neutralPercent = Math.round((categoryData.neutral / total) * 100);
+                    
+                    html += `<div class="category-card">`;
+                    html += `<div class="category-title">${getCategoryIcon(category)} ${getCategoryName(category)}</div>`;
+                    html += `<div class="chart-container">`;
+                    
+                    // 긍정 바
+                    html += `<div class="chart-bar">`;
+                    html += `<div class="chart-label">😊 긍정</div>`;
+                    html += `<div class="chart-progress">`;
+                    html += `<div class="chart-fill positive" style="width: ${likePercent}%"></div>`;
+                    html += `</div>`;
+                    html += `<div class="chart-percentage">${likePercent}%</div>`;
+                    html += `</div>`;
+                    
+                    // 부정 바
+                    html += `<div class="chart-bar">`;
+                    html += `<div class="chart-label">😔 부정</div>`;
+                    html += `<div class="chart-progress">`;
+                    html += `<div class="chart-fill negative" style="width: ${dislikePercent}%"></div>`;
+                    html += `</div>`;
+                    html += `<div class="chart-percentage">${dislikePercent}%</div>`;
+                    html += `</div>`;
+                    
+                    // 중립 바
+                    html += `<div class="chart-bar">`;
+                    html += `<div class="chart-label">😐 중립</div>`;
+                    html += `<div class="chart-progress">`;
+                    html += `<div class="chart-fill neutral" style="width: ${neutralPercent}%"></div>`;
+                    html += `</div>`;
+                    html += `<div class="chart-percentage">${neutralPercent}%</div>`;
+                    html += `</div>`;
+                    
+                    html += `</div>`; // chart-container
+                    html += `</div>`; // category-card
                 });
-            }, 300);
+                html += '</div>';
+
+                // 하단 버튼
+                html += '<div style="margin-top: 40px; padding-top: 30px; border-top: 2px solid rgba(0,0,0,0.05);">';
+                html += '<button class="start-button" onclick="goToHome()" style="background: linear-gradient(135deg, #28a745, #20c997); font-size: 16px; padding: 15px 30px;">✨ 처음으로 돌아가기</button>';
+                html += '</div>';
+
+                resultContent.innerHTML = html;
+                resultsDiv.style.display = 'block';
+                resultsDiv.classList.add('show');
+                
+                // 애니메이션 지연 적용
+                setTimeout(() => {
+                    const fills = document.querySelectorAll('.chart-fill');
+                    fills.forEach((fill, index) => {
+                        setTimeout(() => {
+                            fill.style.width = fill.style.width; // 애니메이션 트리거
+                        }, index * 100);
+                    });
+                }, 300);
+            }).catch((error) => {
+                console.error('통계 로드 실패:', error);
+                alert('통계를 불러오는데 실패했습니다.');
+            });
         }
 
         // 카테고리별 아이콘
